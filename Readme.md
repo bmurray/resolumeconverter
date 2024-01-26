@@ -28,7 +28,7 @@ Follow the official Resolume guide above to link your deck to specific layers.
 11. Profit. 
 
 ### Alternate method
-Once you're at stage 8, you CAN just drag all of the video files into Resolume. But, once imported, you need to select them all, right click, select Transport -> Denon DJ. Right click again and select Target -> Denon Player Determined. You can skip step 8. 
+Once you're at stage 8, you CAN just drag all of the video files into Resolume. But, once imported, you need to select them all, right click, select Transport -> Denon DJ. Right click again and select Target -> Denon Player Determined. You can skip step 8. Note: this method does NOT prevent you from adding the same video file more than once and causing all kinds of havok. The import command checks for existing instances of the file in the composition and skips them if they exist. 
 
 ## That sounds complicated
 
@@ -58,7 +58,7 @@ The next step, `audio` (`./convert audio <*path to MP4 files*> <*audio storage f
 
 *note: the `import-audio` command does both of these steps, so it's marginally easier.*
 
-Finally, the `import` step uses the Resolume API to drop the files into Resolume. This can be done manually in bulk too. 
+Finally, the `import` step uses the Resolume API to drop the files into Resolume. This can be done manually in bulk too. However, the import command checks to see if the file is already in the composition, and skips it if it already is. This makes it safe to run it multiple times in a row as you add more files. 
 
 ## Support / Waranty / Contributing
 

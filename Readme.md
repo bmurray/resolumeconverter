@@ -60,7 +60,7 @@ The next step, `audio` (`./convert audio <*path to MP4 files*> <*audio storage f
 
 Finally, the `import` step uses the Resolume API to drop the files into Resolume. This can be done manually in bulk too. 
 
-## Support / Warantee / Contributing
+## Support / Waranty / Contributing
 
 None. Zero. This is a free project I whipped up in an evening on stream while trying to figure it out. If you have a suggestion for it, submit a pull request and I'll probably blindly merge it. 
 

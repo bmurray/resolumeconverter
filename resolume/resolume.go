@@ -1,12 +1,15 @@
 package resolume
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Resolume struct {
@@ -51,9 +54,113 @@ func (r Resolume) GetComposition(ctx context.Context) (Composition, error) {
 
 	err = json.NewDecoder(resp.Body).Decode(&v)
 	return v, err
-	// enc := json.NewEncoder(os.Stdout)
-	// enc.SetIndent("", "  ")
-	// return v, enc.Encode(v)
+}
+func (r Resolume) FindEmptyClip(ctx context.Context, startLayer, endLayer int) (layer_id int, clip_id int, err error) {
+	if startLayer > endLayer {
+		return 0, 0, fmt.Errorf("startLayer must be less than endLayer")
+	}
+	comp, err := r.GetComposition(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(comp.Layers) < endLayer {
+		return 0, 0, fmt.Errorf("endLayer is greater than number of layers")
+	}
+
+	for i := startLayer; i <= endLayer; i++ {
+		layer := comp.Layers[i]
+		for _, clip := range layer.Clips {
+			if clip.Connected.Value == "Empty" {
+				return layer.Id, clip.Id, nil
+			}
+		}
+	}
+	return 0, 0, fmt.Errorf("no empty clips found")
+}
+func (r Resolume) OpenClip(ctx context.Context, clipId int, filePath string) error {
+
+	fmpath := fmt.Sprintf("file://%s", filePath)
+	furl, err := url.Parse(fmpath)
+	if err != nil {
+		return err
+	}
+
+	slog.Info("Opening clip", "path", furl.String())
+	b := strings.NewReader(furl.String())
+	u, err := r.baseUrl.Parse(fmt.Sprintf("composition/clips/by-id/%d/open", clipId))
+	if err != nil {
+		return err
+	}
+	r.log.Info("Opening clip", "url", u.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), b)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "text/plain")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+
+		return err
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	return nil
+
+}
+func (r Resolume) SetClip(ctx context.Context, clipId int, clip Clip) error {
+	b := bytes.Buffer{}
+	err := json.NewEncoder(&b).Encode(clip)
+	if err != nil {
+		return err
+	}
+	u, err := r.baseUrl.Parse(fmt.Sprintf("composition/clips/by-id/%d", clipId))
+	if err != nil {
+		return err
+	}
+	// r.log.Info("Setting clip", "url", u.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u.String(), &b)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	return nil
+}
+func (r Resolume) SetClipRaw(ctx context.Context, clipId int, val map[string]any) error {
+	b := bytes.Buffer{}
+	err := json.NewEncoder(&b).Encode(val)
+	if err != nil {
+		return err
+	}
+	u, err := r.baseUrl.Parse(fmt.Sprintf("composition/clips/by-id/%d", clipId))
+	if err != nil {
+		return err
+	}
+	// r.log.Info("Setting clip", "url", u.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u.String(), &b)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func (r Resolume) GetSelectedClip(ctx context.Context) (Clip, error) {
@@ -86,4 +193,27 @@ func (r Resolume) GetLayers(ctx context.Context) ([]Layer, error) {
 		return nil, err
 	}
 	return comp.Layers, nil
+}
+func (r Resolume) GetThumbnail(ctx context.Context, clipId int) (io.ReadCloser, error) {
+
+	u, err := r.baseUrl.Parse(fmt.Sprintf("composition/clips/by-id/%s/thumbnail", clipId))
+	if err != nil {
+		return nil, err
+	}
+
+	r.log.Info("Getting thumbnail", "url", u.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return resp.Body, nil
 }

@@ -46,39 +46,69 @@ type Layer struct {
 	Video               Video           `json:"video"`
 }
 
+type Todo map[string]interface{}
+
 type Clip struct {
-	Audio               json.RawMessage `json:"audio"`
-	BeatSnap            json.RawMessage `json:"beatsnap"`
-	Connected           json.RawMessage `json:"connected"`
-	Dashboard           json.RawMessage `json:"dashboard"`
-	FaderStart          json.RawMessage `json:"faderstart"`
-	Id                  int             `json:"id"`
-	IgnoreColumnTrigger json.RawMessage `json:"ignorecolumntrigger"`
-	Name                json.RawMessage `json:"name"`
-	Selected            json.RawMessage `json:"selected"`
-	Target              json.RawMessage `json:"target"`
-	Thumbnail           json.RawMessage `json:"thumbnail"`
-	TransportType       json.RawMessage `json:"transporttype"`
-	TriggerStyle        json.RawMessage `json:"triggerstyle"`
-	Video               ClipVideo       `json:"video"`
+	Audio               Todo      `json:"audio"`
+	BeatSnap            Todo      `json:"beatsnap"`
+	Connected           Connected `json:"connected"`
+	Dashboard           Todo      `json:"dashboard"`
+	FaderStart          Todo      `json:"faderstart"`
+	Id                  int       `json:"id"`
+	IgnoreColumnTrigger Todo      `json:"ignorecolumntrigger"`
+	Name                Name      `json:"name"`
+	Selected            Todo      `json:"selected"`
+	Target              Todo      `json:"target"`
+	Thumbnail           Todo      `json:"thumbnail"`
+	TransportType       Todo      `json:"transporttype"`
+	TriggerStyle        Todo      `json:"triggerstyle"`
+	Video               ClipVideo `json:"video"`
+}
+
+type Name struct {
+	Id        int       `json:"id"`
+	Value     string    `json:"value"`
+	ValueType ValueType `json:"valuetype"`
+}
+
+type Connected struct {
+	Value     string    `json:"value"`
+	ValueType ValueType `json:"valuetype"`
+	Options   []string  `json:"options"`
+	Index     int       `json:"index"`
+	Id        int       `json:"id,omitempty"`
 }
 
 type ClipVideo struct {
-	A            json.RawMessage `json:"a"`
-	B            json.RawMessage `json:"b"`
-	Description  string          `json:"description"`
-	Effects      []Effect        `json:"effects"`
-	FileInfo     json.RawMessage `json:"fileinfo"`
-	G            json.RawMessage `json:"g"`
-	Height       int             `json:"height"`
-	Mixer        json.RawMessage `json:"mixer"`
-	Opacity      json.RawMessage `json:"opacity"`
-	R            json.RawMessage `json:"r"`
-	Resize       json.RawMessage `json:"resize"`
-	SourceParams json.RawMessage `json:"sourceparams"`
-	Width        int             `json:"width"`
+	A            Todo     `json:"a"`
+	B            Todo     `json:"b"`
+	Description  string   `json:"description"`
+	Effects      []Todo   `json:"effects"`
+	FileInfo     FileInfo `json:"fileinfo"`
+	G            Todo     `json:"g"`
+	Height       int      `json:"height"`
+	Mixer        Todo     `json:"mixer"`
+	Opacity      Todo     `json:"opacity"`
+	R            Todo     `json:"r"`
+	Resize       Todo     `json:"resize"`
+	SourceParams Todo     `json:"sourceparams"`
+	Width        int      `json:"width"`
 }
 
+type FileInfo struct {
+	Path       string     `json:"path"`
+	Exists     bool       `json:"exists"`
+	Duration   string     `json:"duration,omitempty"`
+	DurationMS float32    `json:"duration_ms,omitempty"`
+	Framerate  *Framerate `json:"framerate,omoitempty"`
+	Width      int        `json:"width,omitempty"`
+	Height     int        `json:"height,omitempty"`
+}
+
+type Framerate struct {
+	Num int `json:"num"`
+	Den int `json:"den"`
+}
 type Video struct {
 	Autosize json.RawMessage `json:"autosize"`
 	Effects  []Effect        `json:"effects"`
@@ -88,10 +118,12 @@ type Video struct {
 	Opacity  json.RawMessage `json:"opacity"`
 }
 
-type Effect any
+type Effect Todo
 
 type Parameter struct {
 	ValueType string `json:"valuetype"`
 	Id        int    `json:"id"`
 	Value     any    `json:"value"`
 }
+
+type ValueType string

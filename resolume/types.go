@@ -63,6 +63,7 @@ type Clip struct {
 	TransportType       Todo      `json:"transporttype"`
 	TriggerStyle        Todo      `json:"triggerstyle"`
 	Video               ClipVideo `json:"video"`
+	Transport           Todo      `json:"transport"`
 }
 
 type Name struct {

@@ -12,12 +12,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-
-	"math/rand"
+	"time"
 
 	"github.com/bmurray/resolumeconverter/encoder"
 	"github.com/bmurray/resolumeconverter/resolume"
-	"github.com/google/uuid"
 )
 
 func main() {
@@ -181,231 +179,196 @@ func getComposition(ctx context.Context, r *resolume.Resolume) {
 }
 
 func convert(ctx context.Context, r *resolume.Resolume, args []string) {
-	if len(args) < 5 {
-		slog.Error("No file specified")
-		return
-	}
-	inDir := args[0]
-	audioOutDir := args[1]
-	videoOutDir := args[2]
 
-	startLayer, err := strconv.Atoi(args[3])
-	if err != nil {
-		slog.Error("Error parsing start layer", "error", err)
-		return
+	if len(args) == 0 {
+		slog.Error("No command specified")
+		os.Exit(1)
 	}
 
-	if startLayer < 0 {
-		startLayer = 0
-	}
-	endLayer, err := strconv.Atoi(args[4])
-
-	if err != nil {
-		slog.Error("Error parsing end layer", "error", err)
-		return
-	}
-	if endLayer < 0 {
-		endLayer = 0
-	}
-
-	runId, err := uuid.NewRandom()
-	if err != nil {
-		slog.Error("Error generating run ID", "error", err)
-		return
-	}
-	logfile := filepath.Join("logs", runId.String(), "resolumeconverter.log")
-	err = os.MkdirAll(filepath.Dir(logfile), 0755)
-	if err != nil {
-		slog.Error("Error creating log directory", "error", err)
-		return
-	}
-	flog, err := os.Create(logfile)
-	if err != nil {
-		slog.Error("Error creating log file", "error", err)
-		return
-	}
-	defer flog.Close()
-
-	enc := encoder.NewEncoder(
-		encoder.WithStdout(flog),
-		encoder.WithStderr(flog),
-	)
-
-	err = convertAudioFiles(ctx, enc, inDir, audioOutDir)
-	if err != nil {
-		slog.Error("Error converting files", "error", err)
-		return
-	}
-
-	matched, err := matchAudioVideo(ctx, audioOutDir, videoOutDir)
-	if err != nil {
-		slog.Error("Error matching audio and video files", "error", err)
-		return
-	}
-
-	template, err := r.GetSelectedClip(ctx)
-	if err != nil {
-		slog.Error("Error getting selected clip", "error", err)
-		return
-	}
-
-	template = wipeIdenfiers(template)
-
-	for _, m := range matched {
-		// slog.Info("Matched", "file", m)
-		if err := addToResolume(ctx, r, enc, template, audioOutDir, videoOutDir, m, startLayer, endLayer); err != nil {
-			slog.Error("Error adding to resolume", "error", err)
+	switch args[0] {
+	case "input":
+		if len(args) < 2 {
+			slog.Error("No input dir specified specified")
 			return
 		}
+		convertInputs(ctx, args[1])
+	case "audio":
+		// Only do audio conversion
+		if len(args) < 3 {
+			slog.Error("No input dir specified specified")
+			return
+		}
+		inDir := args[1]
+		audioOutDir := args[2]
+		convertAudioFiles(ctx, encoder.NewEncoder(), inDir, audioOutDir)
+	case "input-audio":
+		// Convert input and audio
+		if len(args) < 3 {
+			slog.Error("No input dir specified specified")
+			return
+		}
+		inDir := args[1]
+		audioOutDir := args[2]
 
-		slog.Info("Added", "file", m)
+		convertInputs(ctx, inDir)
+		convertAudioFiles(ctx, encoder.NewEncoder(), inDir, audioOutDir)
+
+	case "import":
+		convertImport(ctx, r, args[1:])
+	default:
+		slog.Error("Unknown command", "command", args[0])
+	}
+}
+func convertImport(ctx context.Context, r *resolume.Resolume, args []string) {
+
+	if len(args) < 2 {
+		slog.Error("No input dir specified specified")
 		return
+	}
+	indir := args[0]
+	layer, err := strconv.Atoi(args[1])
+	if err != nil {
+		slog.Error("Error parsing layer", "error", err)
+		return
+	}
+
+	files, err := filepath.Glob(filepath.Join(indir, "*.mov"))
+	if err != nil {
+		slog.Error("Error globbing files", "error", err)
+		return
+	}
+
+	for _, file := range files {
+		err := convertAddToResolume(ctx, r, file, layer)
+		if err != nil {
+			slog.Error("Error converting file", "error", err)
+			return
+		}
 	}
 }
 
-func addToResolume(ctx context.Context, r *resolume.Resolume, enc *encoder.Encoder, template resolume.Clip, audioOutDir, videoOutDir, name string, startLayer, endLayer int) error {
+func convertInputs(ctx context.Context, inDir string) {
+	// if len(args) < 1 {
+	// 	slog.Error("No input dir specified specified")
+	// 	return
+	// }
+	// inDir := args[0]
+	files, err := filepath.Glob(filepath.Join(inDir, "*.mp4"))
+	if err != nil {
+		slog.Error("Error globbing files", "error", err)
+		return
+	}
+	enc := encoder.NewEncoder()
+	for _, file := range files {
+		slog.Info("Converting", "file", file)
 
-	audioFile := filepath.Join(audioOutDir, name+".m4a")
-	videoFile := filepath.Join(videoOutDir, name+".mov")
-	_ = audioFile
-	_ = videoFile
+		audioTitle, err := getAudioTitle(ctx, enc, file)
+		if err != nil {
+			slog.Error("Error getting audio title", "error", err)
+			return
+		}
+		slog.Info("Audio title", "title", audioTitle)
+		base := filepath.Base(file)
+		ext := filepath.Ext(base)
+		base = base[:len(base)-len(ext)]
+		outFile := filepath.Join(inDir, audioTitle+".mp4")
+		if st, err := os.Stat(outFile); err == nil && st.Size() > 0 {
+			slog.Info("Skipping", "file", file)
+			continue
+		}
+		err = os.Rename(file, outFile)
+		if err != nil {
+			slog.Error("Error renaming file", "error", err)
+			return
+		}
+	}
+}
 
-	exists, err := clipExists(ctx, r, videoFile)
+// func correctAudioVideos(ctx context.Context, matched []string, audioOutDir, videoOutDir string) ([]string, error) {
+// 	correct := make([]string, 0, len(matched))
+// 	for _, m := range matched {
+
+//			newFile, err := correctAudioVideo(ctx, audioOutDir, videoOutDir, m)
+//			if err != nil {
+//				slog.Error("Error correcting audio video", "error", err)
+//				return nil, err
+//			}
+//			correct = append(correct, newFile)
+//		}
+//		return correct, nil
+//	}
+
+func convertAddToResolume(ctx context.Context, r *resolume.Resolume, file string, layer int) error {
+
+	exists, err := clipExists(ctx, r, file)
 	if err != nil {
 		slog.Error("Error checking if clip exists", "error", err)
 		return err
 	}
 	if exists {
-		slog.Info("Clip already exists", "clip", name)
+		slog.Info("Clip already exists", "clip", file)
 		return nil
 	}
 
-	layer, clip, err := r.FindEmptyClip(ctx, startLayer, endLayer)
+	_, clip, err := r.FindEmptyClip(ctx, layer, layer)
 	if err != nil {
 		slog.Error("Error finding empty clip", "error", err)
 		return err
 	}
-	slog.Info("Found empty clip", "layer", layer, "clip", clip)
-
-	audioTitle, err := getAudioTitle(ctx, enc, audioFile)
-	if err != nil {
-		slog.Error("Error getting audio title", "error", err)
-		return err
-	}
-	slog.Info("Audio title", "title", audioTitle)
-
-	template.Name.Value = name
-	template.Video.Description = name
-	template.Video.FileInfo.Path = videoFile
-	template.Video.FileInfo.Duration = ""
-	template.Video.FileInfo.DurationMS = 0
-	template.Video.FileInfo.Framerate = nil
-	template.Video.FileInfo.Width = 0
-	template.Video.FileInfo.Height = 0
-
-	err = r.OpenClip(ctx, clip, videoFile)
+	err = r.OpenClip(ctx, clip.Id, file)
 	if err != nil {
 		slog.Error("Error opening clip", "error", err)
 		return err
 	}
 
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
 	val := make(map[string]any)
-	val["id"] = clip
+	// val["name"] = struct {
+	// 	Valuetype string `json:"valuetype"`
+	// 	Id        int    `json:"id"`
+	// 	Value     string `json:"value"`
+	// }{
+	// 	Valuetype: "ParamString",
+	// 	Id:        clip.Name.Id,
+	// 	Value:     audioTitle,
+	// }
 	val["target"] = struct {
-		Id        int    `json:"id"`
+		// Id        any    `json:"id"`
 		ValueType string `json:"valuetype"`
 		Value     string `json:"value"`
 		Index     int    `json:"index"`
+		// Options   any    `json:"options"`
 	}{
-		Id:        rand.Intn(1000000),
+		// Id:        clip.Target["id"],
 		ValueType: "ParamChoice",
 		Value:     "Denon Player Determined",
 		Index:     4,
+		// Options:   clip.Target["options"],
 	}
 	val["transporttype"] = struct {
-		Id        int    `json:"id"`
+		// 	Id        int    `json:"id"`
 		ValueType string `json:"valuetype"`
 		Value     string `json:"value"`
 		Index     int    `json:"index"`
 	}{
-		Id:        rand.Intn(1000000),
+		// 	Id:        rand.Intn(1000000),
 		ValueType: "ParamChoice",
 		Value:     "Denon DJ",
 		Index:     4,
 	}
-
-	err = r.SetClipRaw(ctx, clip, val)
+	err = r.SetClipRaw(ctx, clip.Id, val)
 	if err != nil {
 		slog.Error("Error setting clip", "error", err)
 		return err
 	}
-	// err = r.SetClip(ctx, clip, template)
-	// if err != nil {
-	// 	slog.Error("Error setting clip", "error", err)
-	// 	return err
-	// }
-
-	// thumbnail, err := enc.GetThumbnail(ctx, videoFile)
-	// if err != nil {
-	// 	slog.Error("Error getting thumbnail", "error", err)
-	// 	return err
-	// }
-	// defer thumbnail.Close()
-	// of, err := os.Create("test.png")
-	// if err != nil {
-	// 	slog.Error("Error creating thumbnail file", "error", err)
-	// 	return err
-	// }
-	// defer of.Close()
-	// _, err = io.Copy(of, thumbnail)
-	// if err != nil {
-	// 	slog.Error("Error copying thumbnail", "error", err)
-	// 	return err
-	// }
-
-	// clip, err := r.AddClip(ctx, name, audioFile, videoFile)
-	// if err != nil {
-	// 	slog.Error("Error adding clip", "error", err)
-	// 	return err
-	// }
-	// slog.Info("Added clip", "clip", clip.Id)
-
 	return nil
-}
-func wipeIdenfiers(template resolume.Clip) resolume.Clip {
-	template.Id = 0
-	template.Name.Id = 0
-	template.Audio = wipeTodo(template.Audio)
-	template.BeatSnap = wipeTodo(template.BeatSnap)
-	template.Dashboard = wipeTodo(template.Dashboard)
-	template.FaderStart = wipeTodo(template.FaderStart)
-	template.IgnoreColumnTrigger = wipeTodo(template.IgnoreColumnTrigger)
-	template.Selected = wipeTodo(template.Selected)
-	template.Target = wipeTodo(template.Target)
-	template.Thumbnail = wipeTodo(template.Thumbnail)
-	template.TransportType = wipeTodo(template.TransportType)
-	template.TriggerStyle = wipeTodo(template.TriggerStyle)
-	template.Connected.Id = 0
-	template.Video.A = wipeTodo(template.Video.A)
-	template.Video.B = wipeTodo(template.Video.B)
-	template.Video.Mixer = wipeTodo(template.Video.Mixer)
-	template.Video.Opacity = wipeTodo(template.Video.Opacity)
-	template.Video.R = wipeTodo(template.Video.R)
-	template.Video.Resize = wipeTodo(template.Video.Resize)
-	template.Video.SourceParams = wipeTodo(template.Video.SourceParams)
 
-	for idx, effect := range template.Video.Effects {
-		template.Video.Effects[idx] = wipeTodo(effect)
-	}
-	return template
 }
-func wipeTodo(todo resolume.Todo) resolume.Todo {
-	if todo == nil {
-		return nil
-	}
-	delete(todo, "id")
-	return todo
-}
+
 func clipExists(ctx context.Context, r *resolume.Resolume, videoFile string) (bool, error) {
 	comp, err := r.GetComposition(ctx)
 	if err != nil {
@@ -434,45 +397,6 @@ func getAudioTitle(ctx context.Context, enc *encoder.Encoder, audioFile string) 
 	return ff, nil
 }
 
-func matchAudioVideo(ctx context.Context, audioOutDir, videoOutDir string) ([]string, error) {
-
-	audiofiles, err := filepath.Glob(filepath.Join(audioOutDir, "*.m4a"))
-	if err != nil {
-		slog.Error("Error globbing audio files", "error", err)
-		return nil, err
-	}
-
-	videoFiles, err := filepath.Glob(filepath.Join(videoOutDir, "*.mov"))
-	if err != nil {
-		slog.Error("Error globbing video files", "error", err)
-		return nil, err
-	}
-
-	files := make(map[string]bool)
-	for _, af := range audiofiles {
-		afbase := filepath.Base(af)
-		afbase = afbase[:len(afbase)-len(".m4a")]
-		files[afbase] = false
-	}
-	for _, vf := range videoFiles {
-		vfbase := filepath.Base(vf)
-		vfbase = vfbase[:len(vfbase)-len(".mov")]
-		if _, ok := files[vfbase]; ok {
-			files[vfbase] = true
-		}
-	}
-	matches := make([]string, 0, len(files))
-	for k, v := range files {
-		if !v {
-			slog.Warn("No video match for audio file", "audio", k)
-			continue
-		}
-		matches = append(matches, k)
-	}
-
-	return matches, nil
-}
-
 func convertAudioFiles(ctx context.Context, enc *encoder.Encoder, inDir, outDir string) error {
 
 	files, err := os.ReadDir(inDir)
@@ -495,7 +419,12 @@ func convertAudioFiles(ctx context.Context, enc *encoder.Encoder, inDir, outDir 
 		fname := filepath.Join(inDir, file.Name())
 
 		slog.Info("Converting", "file", fname)
-		err := enc.Encode(ctx, fname, outDir)
+		basename := filepath.Base(fname)
+		ext := filepath.Ext(basename)
+		basename = basename[:len(basename)-len(ext)]
+		outFile := filepath.Join(outDir, basename+".m4a")
+
+		err := enc.Encode(ctx, fname, outFile)
 		if err != nil {
 			slog.Error("Error converting", "error", err)
 			return err

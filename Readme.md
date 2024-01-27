@@ -18,11 +18,11 @@ Follow the official Resolume guide above to link your deck to specific layers.
 2.  Pick a layer that you want to splat your video files on. Remember this layer. They're 1 indexed; the bottom layer is 1, second is 2, etc.
 3.  Dump your mp4 files into a directory. I personally get mine from  Xtendamix, but any should work. Note; they MUST contain the title metadata. Use ffprobe to verify. 
 4.  Run the command: 
-    `./converter input-audio <*dir with your mp4 files*> <*dir where you want to store your m4a audio files for Engine*>`
+    `./converter convert input-audio <*dir with your mp4 files*> <*dir where you want to store your m4a audio files for Engine*>`
 5. Wait. A while. It's stripping the audio out of your music videos so Engine can read them. Don't worry, it's only copying the audio, so you won't lose quality. 
 6. Open Resolume Alley. Drag all of your mp4 music videos into Alley. Click Convert at the bottom. **Uncheck Audio** (This is **critical**). Change the output folder to somewhere that you can access from Resolume Arena. Use the DXV3 codec for the best performance. This will work with other, smaller codecs, but gets "jumpy", so buy another drive and use DXV3. 
 7. Click Queue. And wait. Even longer this time. It's converting your files to an optimal file format. But, it can do hundreds at a time, so if you have a lot of files, go get a coffee.
-8. You're now ready to import everything. Run the command `./converter import <*dir where you exported your Resolume dxv3 files*> <*layer*>`
+8. You're now ready to import everything. Run the command `./converter convert import <*dir where you exported your Resolume dxv3 files*> <*layer*>`
 9.  Import all of your m4a files into Engine. Add a beatgrid, and transfer them to your Engine DJ gear. **Caution:** Changing the Title can BREAK the association. Try at your peril. This works over a network connection to your desktop version of Engine, or USB, or internal disk. And probably others. 
 10. ...
 11. Profit. 

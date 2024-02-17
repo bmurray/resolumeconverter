@@ -47,10 +47,38 @@ func main() {
 		composition(ctx, r, args[1:])
 	case "convert":
 		convert(ctx, r, args[1:])
+	case "compare":
+		compare(ctx, args[1:])
 	default:
 		slog.Error("Unknown command", "command", args[0])
 	}
 
+}
+func compare(ctx context.Context, args []string) {
+	if len(args) < 2 {
+		slog.Error("Not enough arguments")
+		return
+	}
+	inDir := args[0]
+	outDir := args[1]
+	files, err := filepath.Glob(filepath.Join(inDir, "*.mp4"))
+	if err != nil {
+		slog.Error("Error globbing files", "error", err)
+		return
+	}
+	for _, file := range files {
+		base := filepath.Base(file)
+		ext := filepath.Ext(base)
+		base = base[:len(base)-len(ext)]
+		outFile := filepath.Join(outDir, base+".mov")
+		if st, err := os.Stat(outFile); err == nil && st.Size() > 0 {
+			// slog.Info("Skipping", "file", file)
+			continue
+		}
+		slog.Info("File needs to be converted", "file", file)
+	}
+
+	// compareFiles(ctx, args[0], args[1])
 }
 
 func clips(ctx context.Context, res *resolume.Resolume, args []string) {
